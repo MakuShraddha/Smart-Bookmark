@@ -1,97 +1,36 @@
-# Smart Bookmark
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
-Simple private bookmark manager built with:
+## Getting Started
 
-- Next.js (App Router)
-- Supabase (Google OAuth, Postgres, Realtime)
-- Tailwind CSS
-
-## Features
-
-- Google-only login (no email/password flow)
-- Add bookmark (`title` + `url` + optional `category`)
-- Edit bookmark
-- Per-user privacy with Row Level Security (RLS)
-- Real-time bookmark list updates across tabs
-- Delete own bookmarks
-- Search bookmarks by title/URL/category
-
-## Local Setup
-
-1. Install dependencies:
-
-```bash
-npm install
-```
-
-2. Create `.env.local` from `.env.example` and fill values:
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-NEXT_PUBLIC_SITE_URL=https://<your-vercel-domain>
-```
-
-3. In Supabase SQL editor, run:
-
-`supabase/schema.sql`
-
-4. In Supabase Auth settings:
-
-- Enable `Google` provider
-- Add redirect URL(s):
-  - `http://localhost:3000/auth/callback`
-  - `https://<your-vercel-domain>/auth/callback`
-
-5. Run app:
+First, run the development server:
 
 ```bash
 npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
 ```
 
-## Database and Security
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-The `bookmarks` table includes `user_id` that references `auth.users(id)`.
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-RLS policies enforce:
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-- `select`: user can read only rows where `auth.uid() = user_id`
-- `insert`: user can insert only rows with own `user_id`
-- `delete`: user can delete only own rows
-- `update`: user can update only own rows
+## Learn More
 
-Realtime is enabled on `public.bookmarks` via publication.
+To learn more about Next.js, take a look at the following resources:
 
-## Deploy to Vercel
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
-1. Push this repository to GitHub.
-2. Import repo in Vercel.
-3. Add environment variables in Vercel project settings:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `NEXT_PUBLIC_SITE_URL` (your production domain)
-4. Redeploy.
-5. Add the final Vercel URL callback in Supabase Google auth settings.
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-## Problems Faced and How They Were Solved
+## Deploy on Vercel
 
-1. OAuth callback session handling:
-   - Problem: after Google login, session was not guaranteed to be exchanged on server.
-   - Solution: added `src/app/auth/callback/route.ts` to exchange OAuth code and redirect cleanly.
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-2. Data isolation per user:
-   - Problem: frontend filtering alone is not secure.
-   - Solution: enforced RLS policies at DB level with `auth.uid() = user_id` checks.
-
-3. Realtime updates not scoped:
-   - Problem: realtime events can be noisy if not filtered.
-   - Solution: subscribed with filter `user_id=eq.<current_user_id>` and refetched list on changes.
-
-4. Folder naming issue during scaffolding:
-   - Problem: `create-next-app` rejected uppercase directory name.
-   - Solution: scaffolded in a temporary lowercase folder and moved files to repo root.
-
-## Submission Info
-
-- Live Vercel URL: `<add-after-deploy>`
-- Public GitHub repo: `<add-after-push>`
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
