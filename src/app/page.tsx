@@ -1,416 +1,295 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/client";
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
+import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
+import { motion } from "framer-motion";
 
-type Bookmark = {
+// Recharts dynamic imports
+const BarChart = dynamic(() => import("recharts").then((mod) => mod.BarChart), { ssr: false });
+const Bar = dynamic(() => import("recharts").then((mod) => mod.Bar), { ssr: false });
+const XAxis = dynamic(() => import("recharts").then((mod) => mod.XAxis), { ssr: false });
+const YAxis = dynamic(() => import("recharts").then((mod) => mod.YAxis), { ssr: false });
+const Tooltip = dynamic(() => import("recharts").then((mod) => mod.Tooltip), { ssr: false });
+const ResponsiveContainer = dynamic(() => import("recharts").then((mod) => mod.ResponsiveContainer), { ssr: false });
+
+interface Bookmark {
   id: string;
   title: string;
   url: string;
-  category: string | null;
-  created_at: string;
-};
+  category: string;
+  user_id: string;
+  created_at?: string;
+}
 
-export default function Home() {
-  const isSupabaseConfigured = Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  );
-  const supabase = useMemo(
-    () => (isSupabaseConfigured ? createClient() : null),
-    [isSupabaseConfigured],
-  );
-  const [session, setSession] = useState<Session | null>(null);
+export default function Dashboard() {
+  const router = useRouter();
+
+  const [user, setUser] = useState<any>(null);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
   const [category, setCategory] = useState("");
   const [search, setSearch] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
+  const [weeklyData, setWeeklyData] = useState<any[]>([]);
   const [darkMode, setDarkMode] = useState(false);
-  const [status, setStatus] = useState(
-    isSupabaseConfigured
-      ? ""
-      : "Missing Supabase environment variables. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.",
-  );
-  const [loading, setLoading] = useState(isSupabaseConfigured);
-  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const user = session?.user;
+  // Check auth on mount
+  useEffect(() => {
+    checkUser();
+  }, []);
 
-  const fetchBookmarks = useCallback(async (userId: string) => {
-    if (!supabase) return;
+  useEffect(() => {
+    if (user) fetchBookmarks();
+  }, [user]);
+
+  async function checkUser() {
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) {
+      router.push("/login");
+    } else {
+      setUser(data.user);
+      fetchBookmarks(data.user.id);
+      setLoading(false);
+    }
+  }
+
+  // Fetch bookmarks and weekly chart data
+  async function fetchBookmarks(userId?: string) {
+    if (!userId && user) userId = user.id;
 
     const { data, error } = await supabase
       .from("bookmarks")
-      .select("id,title,url,category,created_at")
+      .select("*")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
     if (error) {
-      setStatus(error.message);
+      console.error(error);
       return;
     }
 
-    setBookmarks(data ?? []);
-  }, [supabase]);
+    setBookmarks(data || []);
 
-  useEffect(() => {
-    if (!supabase) return;
+    // Weekly chart data
+    const last7Days: any = {};
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toLocaleDateString("en-US", { weekday: "short" });
+      last7Days[key] = 0;
+    }
 
-    const bootstrap = async () => {
-      const { data, error } = await supabase.auth.getSession();
-      if (error) {
-        setStatus(error.message);
-      } else {
-        setSession(data.session);
-      }
-      setLoading(false);
-    };
-
-    bootstrap();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-      if (!nextSession) {
-        setBookmarks([]);
+    (data || []).forEach((item) => {
+      const created = new Date(item.created_at || "");
+      const diff = (new Date().getTime() - created.getTime()) / (1000 * 60 * 60 * 24);
+      if (diff <= 7) {
+        const key = created.toLocaleDateString("en-US", { weekday: "short" });
+        if (last7Days[key] !== undefined) last7Days[key]++;
       }
     });
 
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [supabase]);
-
-  useEffect(() => {
-    if (!supabase || !user) return;
-
-    queueMicrotask(() => {
-      fetchBookmarks(user.id);
-    });
-
-    const channel = supabase
-      .channel(`bookmarks-${user.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "bookmarks",
-          filter: `user_id=eq.${user.id}`,
-        },
-        () => {
-          fetchBookmarks(user.id);
-        },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [fetchBookmarks, supabase, user]);
-
-  const signInWithGoogle = async () => {
-    if (!supabase) return;
-
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${siteUrl}/auth/callback`,
-      },
-    });
-    if (error) {
-      setStatus(error.message);
-    }
-  };
-
-  const signOut = async () => {
-    if (!supabase) return;
-
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      setStatus(error.message);
-    } else {
-      setStatus("");
-    }
-  };
-
-  const addOrUpdateBookmark = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!supabase || !user) return;
-
-    const trimmedTitle = title.trim();
-    const trimmedUrl = url.trim();
-    const trimmedCategory = category.trim();
-
-    if (!trimmedTitle || !trimmedUrl) {
-      setStatus("Title and URL are required.");
-      return;
-    }
-
-    try {
-      new URL(trimmedUrl);
-    } catch {
-      setStatus("Please enter a valid URL, for example https://example.com.");
-      return;
-    }
-
-    setSaving(true);
-    const payload = {
-      title: trimmedTitle,
-      url: trimmedUrl,
-      category: trimmedCategory || null,
-      user_id: user.id,
-    };
-
-    const { error } = editId
-      ? await supabase
-          .from("bookmarks")
-          .update({
-            title: payload.title,
-            url: payload.url,
-            category: payload.category,
-          })
-          .eq("id", editId)
-          .eq("user_id", user.id)
-      : await supabase.from("bookmarks").insert(payload);
-
-    if (error) {
-      setStatus(error.message);
-    } else {
-      setTitle("");
-      setUrl("");
-      setCategory("");
-      setEditId(null);
-      setStatus("");
-    }
-    setSaving(false);
-  };
-
-  const deleteBookmark = async (id: string) => {
-    if (!supabase) return;
-
-    const { error } = await supabase.from("bookmarks").delete().eq("id", id);
-    if (error) {
-      setStatus(error.message);
-    }
-  };
-
-  const startEditBookmark = (bookmark: Bookmark) => {
-    setTitle(bookmark.title);
-    setUrl(bookmark.url);
-    setCategory(bookmark.category ?? "");
-    setEditId(bookmark.id);
-  };
-
-  const filteredBookmarks = bookmarks.filter((bookmark) => {
-    const needle = search.trim().toLowerCase();
-    if (!needle) return true;
-    return (
-      bookmark.title.toLowerCase().includes(needle) ||
-      bookmark.url.toLowerCase().includes(needle) ||
-      (bookmark.category ?? "").toLowerCase().includes(needle)
+    setWeeklyData(
+      Object.keys(last7Days).map((key) => ({ name: key, value: last7Days[key] }))
     );
-  });
+  }
+
+  // Add or update bookmark
+  async function addOrUpdateBookmark() {
+    if (!title || !url || !user) return;
+
+    if (editId) {
+      await supabase
+        .from("bookmarks")
+        .update({ title, url, category })
+        .eq("id", editId);
+      setEditId(null);
+    } else {
+      await supabase.from("bookmarks").insert([{ title, url, category, user_id: user.id }]);
+    }
+
+    setTitle("");
+    setUrl("");
+    setCategory("");
+    fetchBookmarks();
+  }
+
+  async function deleteBookmark(id: string) {
+    await supabase.from("bookmarks").delete().eq("id", id);
+    fetchBookmarks();
+  }
+
+  function handleEdit(bookmark: Bookmark) {
+    setTitle(bookmark.title || "");
+    setUrl(bookmark.url || "");
+    setCategory(bookmark.category || "");
+    setEditId(bookmark.id);
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setUser(null);
+    setBookmarks([]);
+    router.push("/login");
+  }
+
+  const filteredBookmarks = bookmarks.filter(
+    (b) =>
+      b.title.toLowerCase().includes(search.toLowerCase()) ||
+      b.category?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  if (!user) return null;
 
   return (
-    <main
-      className={`mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 px-4 py-10 ${
-        darkMode ? "bg-zinc-900 text-zinc-100" : "text-zinc-900"
+    <div
+      className={`min-h-screen p-6 transition-all duration-500 ${
+        darkMode
+          ? "bg-[#1e1b18] text-[#f5e6d3]"
+          : "bg-gradient-to-br from-[#f5e6d3] to-[#e8d8c3] text-[#4b2e1e]"
       }`}
     >
-      <header
-        className={`rounded-xl border p-6 shadow-sm ${
-          darkMode
-            ? "border-zinc-700 bg-zinc-800"
-            : "border-zinc-200 bg-white"
-        }`}
-      >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-2xl font-semibold">Smart Bookmark</h1>
-          <button
-            onClick={() => setDarkMode((value) => !value)}
-            className={`rounded-md border px-3 py-2 text-sm ${
-              darkMode
-                ? "border-zinc-600 hover:bg-zinc-700"
-                : "border-zinc-300 hover:bg-zinc-50"
-            }`}
-          >
-            {darkMode ? "Light mode" : "Dark mode"}
-          </button>
+      <div className="max-w-6xl mx-auto">
+
+        {/* HEADER */}
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-10">
+          <h1 className="text-4xl font-extrabold tracking-wide">Smart Bookmark Dashboard</h1>
+
+          <div className="flex gap-4">
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="px-4 py-2 border-2 rounded-lg font-semibold"
+            >
+              {darkMode ? "☀ Light" : "🌙 Dark"}
+            </button>
+
+            <button
+              onClick={() => router.push("/profile")}
+              className="px-4 py-2 border-2 rounded-lg font-semibold"
+            >
+              Profile
+            </button>
+
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 border-2 rounded-lg font-semibold"
+            >
+              Logout
+            </button>
+          </div>
         </div>
-        <p className="mt-2 text-sm text-zinc-600">
-          Private bookmark manager powered by Supabase Auth and Realtime.
-        </p>
-      </header>
 
-      {loading ? (
-        <section
-          className={`rounded-xl border p-6 shadow-sm ${
-            darkMode
-              ? "border-zinc-700 bg-zinc-800"
-              : "border-zinc-200 bg-white"
-          }`}
+        {/* ADD / EDIT FORM */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-[#fffaf3] p-6 rounded-2xl shadow-md border-2 border-[#5c3a21] mb-8"
         >
-          <p className="text-sm text-zinc-600">Loading session...</p>
-        </section>
-      ) : !user ? (
-        <section
-          className={`rounded-xl border p-6 shadow-sm ${
-            darkMode
-              ? "border-zinc-700 bg-zinc-800"
-              : "border-zinc-200 bg-white"
-          }`}
-        >
-          <p className="mb-4 text-sm text-zinc-700">
-            Sign in with Google to manage your private bookmarks.
-          </p>
-          <button
-            onClick={signInWithGoogle}
-            className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
-          >
-            Continue with Google
-          </button>
-        </section>
-      ) : (
-        <>
-          <section
-            className={`rounded-xl border p-6 shadow-sm ${
-              darkMode
-                ? "border-zinc-700 bg-zinc-800"
-                : "border-zinc-200 bg-white"
-            }`}
-          >
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <p className="text-sm text-zinc-600">
-                Signed in as <span className="font-medium">{user.email}</span>
-              </p>
-              <button
-                onClick={signOut}
-                className="rounded-md border border-zinc-300 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
-              >
-                Sign out
-              </button>
-            </div>
+          <h2 className="text-xl font-bold text-[#5c3a21] mb-4">
+            {editId ? "✏️ Edit Bookmark" : "➕ Add Bookmark"}
+          </h2>
 
-            <form onSubmit={addOrUpdateBookmark} className="grid gap-3 sm:grid-cols-3">
-              <input
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                placeholder="Bookmark title"
-                className="rounded-md border border-zinc-300 px-3 py-2 text-sm sm:col-span-1"
-              />
-              <input
-                value={url}
-                onChange={(event) => setUrl(event.target.value)}
-                placeholder="https://example.com"
-                className="rounded-md border border-zinc-300 px-3 py-2 text-sm sm:col-span-2"
-              />
-              <input
-                value={category}
-                onChange={(event) => setCategory(event.target.value)}
-                placeholder="Category (optional)"
-                className="rounded-md border border-zinc-300 px-3 py-2 text-sm sm:col-span-2"
-              />
-              <button
-                type="submit"
-                disabled={saving}
-                className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 sm:col-span-3"
-              >
-                {saving ? "Saving..." : editId ? "Update bookmark" : "Add bookmark"}
-              </button>
-              {editId ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditId(null);
-                    setTitle("");
-                    setUrl("");
-                    setCategory("");
-                  }}
-                  className="rounded-md border border-zinc-300 px-4 py-2 text-sm sm:col-span-3"
-                >
-                  Cancel edit
-                </button>
-              ) : null}
-            </form>
-          </section>
-
-          <section
-            className={`rounded-xl border p-6 shadow-sm ${
-              darkMode
-                ? "border-zinc-700 bg-zinc-800"
-                : "border-zinc-200 bg-white"
-            }`}
-          >
+          <div className="grid md:grid-cols-3 gap-4">
             <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search by title, URL, or category"
-              className="mb-4 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+              placeholder="Title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value || "")}
+              className="p-3 rounded-lg border-2 border-[#5c3a21] font-semibold placeholder:text-[#7a5a3a] focus:ring-2 focus:ring-[#5c3a21]"
             />
-            <h2 className="mb-4 text-lg font-semibold text-zinc-900">
-              Your bookmarks ({filteredBookmarks.length})
-            </h2>
+            <input
+              placeholder="URL"
+              value={url}
+              onChange={(e) => setUrl(e.target.value || "")}
+              className="p-3 rounded-lg border-2 border-[#5c3a21] font-semibold placeholder:text-[#7a5a3a] focus:ring-2 focus:ring-[#5c3a21]"
+            />
+            <input
+              placeholder="Category"
+              value={category}
+              onChange={(e) => setCategory(e.target.value || "")}
+              className="p-3 rounded-lg border-2 border-[#5c3a21] font-semibold placeholder:text-[#7a5a3a] focus:ring-2 focus:ring-[#5c3a21]"
+            />
+          </div>
 
-            {filteredBookmarks.length === 0 ? (
-              <p className="text-sm text-zinc-600">
-                No matching bookmarks.
-              </p>
-            ) : (
-              <ul className="space-y-3">
-                {filteredBookmarks.map((bookmark) => (
-                  <li
-                    key={bookmark.id}
-                    className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div>
-                      <p className="font-medium text-zinc-900">{bookmark.title}</p>
-                      <a
-                        href={bookmark.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-sm text-blue-700 hover:underline"
-                      >
-                        {bookmark.url}
-                      </a>
-                      {bookmark.category ? (
-                        <p className="text-xs text-zinc-500">
-                          Category: {bookmark.category}
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => startEditBookmark(bookmark)}
-                        className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => deleteBookmark(bookmark.id)}
-                        className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </>
-      )}
+          <button
+            onClick={addOrUpdateBookmark}
+            className="mt-4 px-6 py-2 border-2 border-[#5c3a21] text-[#5c3a21] font-bold rounded-lg hover:bg-[#5c3a21] hover:text-white transition"
+          >
+            {editId ? "Update" : "Add"}
+          </button>
+        </motion.div>
 
-      {status ? (
-        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {status}
-        </p>
-      ) : null}
-    </main>
+        {/* SEARCH */}
+        <input
+          placeholder="🔎 Search by title or category..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value || "")}
+          className="w-full md:w-1/2 p-3 rounded-lg border-2 border-[#5c3a21] font-semibold placeholder:text-[#7a5a3a] focus:ring-2 focus:ring-[#5c3a21] mb-8"
+        />
+
+        {/* TOTAL BOOKMARKS */}
+        <motion.div
+          whileHover={{ scale: 1.03 }}
+          className="p-6 rounded-2xl shadow-md border-2 bg-[#fffaf3] border-[#5c3a21] mb-10"
+        >
+          <h2 className="font-bold mb-2">Total Bookmarks</h2>
+          <p className="text-3xl font-extrabold">{bookmarks.length}</p>
+        </motion.div>
+
+        {/* WEEKLY CHART */}
+        <motion.div className="p-8 rounded-2xl shadow-md border-2 bg-[#fffaf3] border-[#5c3a21] mb-10">
+          <h2 className="text-xl font-bold mb-6">Weekly Bookmark Activity</h2>
+          <div className="w-full h-64">
+            <ResponsiveContainer>
+              <BarChart data={weeklyData}>
+                <XAxis dataKey="name" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="value" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </motion.div>
+
+        {/* BOOKMARK GRID */}
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredBookmarks.map((bookmark) => (
+            <motion.div
+              key={bookmark.id}
+              whileHover={{ scale: 1.04 }}
+              className="bg-[#fffaf3] p-5 rounded-2xl shadow-md border-2 border-[#5c3a21]"
+            >
+              <h3 className="font-bold text-[#5c3a21] text-lg mb-2">{bookmark.title}</h3>
+              <a
+                href={bookmark.url}
+                target="_blank"
+                className="block text-blue-700 underline font-semibold mb-2 break-words"
+              >
+                {bookmark.url}
+              </a>
+              <p className="font-semibold text-[#5c3a21] mb-4">📂 {bookmark.category}</p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => handleEdit(bookmark)}
+                  className="px-3 py-1 border-2 border-[#5c3a21] text-[#5c3a21] rounded-lg hover:bg-[#5c3a21] hover:text-white transition font-semibold"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => deleteBookmark(bookmark.id)}
+                  className="px-3 py-1 border-2 border-red-600 text-red-600 rounded-lg hover:bg-red-600 hover:text-white transition font-semibold"
+                >
+                  Delete
+                </button>
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+      </div>
+    </div>
   );
 }
