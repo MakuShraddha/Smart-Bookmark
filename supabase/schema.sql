@@ -5,10 +5,12 @@ create table if not exists public.bookmarks (
   user_id uuid not null references auth.users(id) on delete cascade,
   title text not null,
   url text not null,
+  category text,
   created_at timestamptz not null default now()
 );
 
 alter table public.bookmarks enable row level security;
+alter table public.bookmarks add column if not exists category text;
 
 drop policy if exists "Users can read own bookmarks" on public.bookmarks;
 create policy "Users can read own bookmarks"
@@ -30,5 +32,13 @@ on public.bookmarks
 for delete
 to authenticated
 using (auth.uid() = user_id);
+
+drop policy if exists "Users can update own bookmarks" on public.bookmarks;
+create policy "Users can update own bookmarks"
+on public.bookmarks
+for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
 
 alter publication supabase_realtime add table public.bookmarks;

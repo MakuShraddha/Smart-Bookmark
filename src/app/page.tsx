@@ -8,6 +8,7 @@ type Bookmark = {
   id: string;
   title: string;
   url: string;
+  category: string | null;
   created_at: string;
 };
 
@@ -24,6 +25,10 @@ export default function Home() {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
+  const [category, setCategory] = useState("");
+  const [search, setSearch] = useState("");
+  const [editId, setEditId] = useState<string | null>(null);
+  const [darkMode, setDarkMode] = useState(false);
   const [status, setStatus] = useState(
     isSupabaseConfigured
       ? ""
@@ -39,7 +44,7 @@ export default function Home() {
 
     const { data, error } = await supabase
       .from("bookmarks")
-      .select("id,title,url,created_at")
+      .select("id,title,url,category,created_at")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
@@ -111,10 +116,11 @@ export default function Home() {
   const signInWithGoogle = async () => {
     if (!supabase) return;
 
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
+        redirectTo: `${siteUrl}/auth/callback`,
       },
     });
     if (error) {
@@ -133,12 +139,13 @@ export default function Home() {
     }
   };
 
-  const addBookmark = async (event: FormEvent<HTMLFormElement>) => {
+  const addOrUpdateBookmark = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!supabase || !user) return;
 
     const trimmedTitle = title.trim();
     const trimmedUrl = url.trim();
+    const trimmedCategory = category.trim();
 
     if (!trimmedTitle || !trimmedUrl) {
       setStatus("Title and URL are required.");
@@ -153,17 +160,32 @@ export default function Home() {
     }
 
     setSaving(true);
-    const { error } = await supabase.from("bookmarks").insert({
+    const payload = {
       title: trimmedTitle,
       url: trimmedUrl,
+      category: trimmedCategory || null,
       user_id: user.id,
-    });
+    };
+
+    const { error } = editId
+      ? await supabase
+          .from("bookmarks")
+          .update({
+            title: payload.title,
+            url: payload.url,
+            category: payload.category,
+          })
+          .eq("id", editId)
+          .eq("user_id", user.id)
+      : await supabase.from("bookmarks").insert(payload);
 
     if (error) {
       setStatus(error.message);
     } else {
       setTitle("");
       setUrl("");
+      setCategory("");
+      setEditId(null);
       setStatus("");
     }
     setSaving(false);
@@ -178,21 +200,72 @@ export default function Home() {
     }
   };
 
+  const startEditBookmark = (bookmark: Bookmark) => {
+    setTitle(bookmark.title);
+    setUrl(bookmark.url);
+    setCategory(bookmark.category ?? "");
+    setEditId(bookmark.id);
+  };
+
+  const filteredBookmarks = bookmarks.filter((bookmark) => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return true;
+    return (
+      bookmark.title.toLowerCase().includes(needle) ||
+      bookmark.url.toLowerCase().includes(needle) ||
+      (bookmark.category ?? "").toLowerCase().includes(needle)
+    );
+  });
+
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 px-4 py-10">
-      <header className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-zinc-900">Smart Bookmark</h1>
+    <main
+      className={`mx-auto flex min-h-screen w-full max-w-5xl flex-col gap-6 px-4 py-10 ${
+        darkMode ? "bg-zinc-900 text-zinc-100" : "text-zinc-900"
+      }`}
+    >
+      <header
+        className={`rounded-xl border p-6 shadow-sm ${
+          darkMode
+            ? "border-zinc-700 bg-zinc-800"
+            : "border-zinc-200 bg-white"
+        }`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-semibold">Smart Bookmark</h1>
+          <button
+            onClick={() => setDarkMode((value) => !value)}
+            className={`rounded-md border px-3 py-2 text-sm ${
+              darkMode
+                ? "border-zinc-600 hover:bg-zinc-700"
+                : "border-zinc-300 hover:bg-zinc-50"
+            }`}
+          >
+            {darkMode ? "Light mode" : "Dark mode"}
+          </button>
+        </div>
         <p className="mt-2 text-sm text-zinc-600">
           Private bookmark manager powered by Supabase Auth and Realtime.
         </p>
       </header>
 
       {loading ? (
-        <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+        <section
+          className={`rounded-xl border p-6 shadow-sm ${
+            darkMode
+              ? "border-zinc-700 bg-zinc-800"
+              : "border-zinc-200 bg-white"
+          }`}
+        >
           <p className="text-sm text-zinc-600">Loading session...</p>
         </section>
       ) : !user ? (
-        <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+        <section
+          className={`rounded-xl border p-6 shadow-sm ${
+            darkMode
+              ? "border-zinc-700 bg-zinc-800"
+              : "border-zinc-200 bg-white"
+          }`}
+        >
           <p className="mb-4 text-sm text-zinc-700">
             Sign in with Google to manage your private bookmarks.
           </p>
@@ -205,7 +278,13 @@ export default function Home() {
         </section>
       ) : (
         <>
-          <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+          <section
+            className={`rounded-xl border p-6 shadow-sm ${
+              darkMode
+                ? "border-zinc-700 bg-zinc-800"
+                : "border-zinc-200 bg-white"
+            }`}
+          >
             <div className="mb-4 flex items-center justify-between gap-3">
               <p className="text-sm text-zinc-600">
                 Signed in as <span className="font-medium">{user.email}</span>
@@ -218,7 +297,7 @@ export default function Home() {
               </button>
             </div>
 
-            <form onSubmit={addBookmark} className="grid gap-3 sm:grid-cols-3">
+            <form onSubmit={addOrUpdateBookmark} className="grid gap-3 sm:grid-cols-3">
               <input
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
@@ -231,28 +310,60 @@ export default function Home() {
                 placeholder="https://example.com"
                 className="rounded-md border border-zinc-300 px-3 py-2 text-sm sm:col-span-2"
               />
+              <input
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+                placeholder="Category (optional)"
+                className="rounded-md border border-zinc-300 px-3 py-2 text-sm sm:col-span-2"
+              />
               <button
                 type="submit"
                 disabled={saving}
                 className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60 sm:col-span-3"
               >
-                {saving ? "Saving..." : "Add bookmark"}
+                {saving ? "Saving..." : editId ? "Update bookmark" : "Add bookmark"}
               </button>
+              {editId ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditId(null);
+                    setTitle("");
+                    setUrl("");
+                    setCategory("");
+                  }}
+                  className="rounded-md border border-zinc-300 px-4 py-2 text-sm sm:col-span-3"
+                >
+                  Cancel edit
+                </button>
+              ) : null}
             </form>
           </section>
 
-          <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+          <section
+            className={`rounded-xl border p-6 shadow-sm ${
+              darkMode
+                ? "border-zinc-700 bg-zinc-800"
+                : "border-zinc-200 bg-white"
+            }`}
+          >
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search by title, URL, or category"
+              className="mb-4 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm"
+            />
             <h2 className="mb-4 text-lg font-semibold text-zinc-900">
-              Your bookmarks ({bookmarks.length})
+              Your bookmarks ({filteredBookmarks.length})
             </h2>
 
-            {bookmarks.length === 0 ? (
+            {filteredBookmarks.length === 0 ? (
               <p className="text-sm text-zinc-600">
-                No bookmarks yet. Add your first one above.
+                No matching bookmarks.
               </p>
             ) : (
               <ul className="space-y-3">
-                {bookmarks.map((bookmark) => (
+                {filteredBookmarks.map((bookmark) => (
                   <li
                     key={bookmark.id}
                     className="flex flex-col gap-2 rounded-md border border-zinc-200 p-3 sm:flex-row sm:items-center sm:justify-between"
@@ -267,13 +378,26 @@ export default function Home() {
                       >
                         {bookmark.url}
                       </a>
+                      {bookmark.category ? (
+                        <p className="text-xs text-zinc-500">
+                          Category: {bookmark.category}
+                        </p>
+                      ) : null}
                     </div>
-                    <button
-                      onClick={() => deleteBookmark(bookmark.id)}
-                      className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
-                    >
-                      Delete
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => startEditBookmark(bookmark)}
+                        className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => deleteBookmark(bookmark.id)}
+                        className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>

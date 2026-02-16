@@ -9,10 +9,12 @@ Simple private bookmark manager built with:
 ## Features
 
 - Google-only login (no email/password flow)
-- Add bookmark (`title` + `url`)
+- Add bookmark (`title` + `url` + optional `category`)
+- Edit bookmark
 - Per-user privacy with Row Level Security (RLS)
 - Real-time bookmark list updates across tabs
 - Delete own bookmarks
+- Search bookmarks by title/URL/category
 
 ## Local Setup
 
@@ -27,6 +29,7 @@ npm install
 ```env
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+NEXT_PUBLIC_SITE_URL=https://<your-vercel-domain>
 ```
 
 3. In Supabase SQL editor, run:
@@ -55,6 +58,7 @@ RLS policies enforce:
 - `select`: user can read only rows where `auth.uid() = user_id`
 - `insert`: user can insert only rows with own `user_id`
 - `delete`: user can delete only own rows
+- `update`: user can update only own rows
 
 Realtime is enabled on `public.bookmarks` via publication.
 
@@ -65,6 +69,7 @@ Realtime is enabled on `public.bookmarks` via publication.
 3. Add environment variables in Vercel project settings:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `NEXT_PUBLIC_SITE_URL` (your production domain)
 4. Redeploy.
 5. Add the final Vercel URL callback in Supabase Google auth settings.
 
