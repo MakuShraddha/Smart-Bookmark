@@ -25,8 +25,13 @@ export default function Login() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleLogin = async () => {
-    await supabase.auth.signInWithOAuth({ provider: "google" });
+    const handleLogin = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/`,
+      },
+    });
   };
 
   const testimonials = [
