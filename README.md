@@ -46,20 +46,25 @@ Smart-Bookmark is a modern web application built with **Next.js** and **Supabase
       npm install
    
 2. Create a .env file with your Supabase keys:
+
    NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
    
-3. Run the development server:
+4. Run the development server:
       ```bash
       npm run dev
 
-4. Open http://localhost:3000 to view the app.
+5. Open http://localhost:3000 to view the app.
 
 ## 🌟 Future Enhancements
 
    Tag-based bookmark filtering
+   
    Export/import bookmarks in CSV or JSON
+   
    Dark mode toggle
+   
    Advanced analytics dashboard
    
 ## 📌 Project Links
