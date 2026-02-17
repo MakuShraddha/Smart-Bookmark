@@ -8,13 +8,17 @@ export default function Login() {
   const [darkMode, setDarkMode] = useState(false);
 
   const handleLogin = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/`,
-      },
-    });
-  };
+  const redirectTo = `${window.location.origin}/app`; // points to /app page
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo },
+  });
+
+  if (error) {
+    console.error("Login error:", error.message);
+  }
+};
+
 
   return (
     <div
