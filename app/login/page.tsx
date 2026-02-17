@@ -10,8 +10,11 @@ export default function Login() {
   const router = useRouter();
 
   useEffect(() => {
+    console.log("Auth state listener mounted");
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("Auth event:", event, "Session:", session);
       if (event === "SIGNED_IN" && session) {
+        console.log("User signed in, redirecting to /");
         router.push("/");
       }
     });
