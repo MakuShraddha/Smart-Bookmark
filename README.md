@@ -50,6 +50,7 @@ Smart-Bookmark is a modern web application built with **Next.js** and **Supabase
    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
    
 3. Run the development server:
+      ```bash
       npm run dev
 
 4. Open http://localhost:3000 to view the app.
@@ -64,4 +65,5 @@ Smart-Bookmark is a modern web application built with **Next.js** and **Supabase
 ## 📌 Project Links
 
    Repository: https://github.com/MakuShraddha/Smart-Bookmark
+   
    Live Demo: https://smart-bookmark-indol.vercel.app/login
