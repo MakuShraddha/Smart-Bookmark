@@ -8,7 +8,12 @@ export default function Login() {
   const [darkMode, setDarkMode] = useState(false);
 
   const handleLogin = async () => {
-    await supabase.auth.signInWithOAuth({ provider: "google" });
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/`,
+      },
+    });
   };
 
   return (
@@ -48,7 +53,7 @@ export default function Login() {
           className="w-full flex items-center justify-center gap-3 px-6 py-3 rounded-xl bg-white dark:bg-gray-800 text-[#5c3a21] dark:text-[#f5e6d3] font-bold shadow-md hover:shadow-lg transition transform hover:-translate-y-1"
         >
           <img
-            src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg"
+            src="https://www.vecteezy.com/png/42165816-google-logo-transparent-png"
             alt="Google Logo"
             className="w-6 h-6"
           />
