@@ -1,11 +1,22 @@
 "use client";
 
 import { supabase } from "@/lib/supabaseClient";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 
 export default function Login() {
   const [darkMode, setDarkMode] = useState(false);
+  const router = useRouter();
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session) {
+        router.push("/");
+      }
+    });
+    return () => subscription?.unsubscribe();
+  }, [router]);
 
   const handleLogin = async () => {
     await supabase.auth.signInWithOAuth({
