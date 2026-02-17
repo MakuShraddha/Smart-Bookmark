@@ -20,6 +20,17 @@ export default function Login() {
   const [darkMode, setDarkMode] = useState(false);
   const [currentQuote, setCurrentQuote] = useState(0);
 
+  async function setDefaultAvatar() {
+    const defaultAvatarSvg = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMjAwIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzVjM2EyMSIvPjxjaXJjbGUgY3g9IjEwMCIgY3k9IjcwIiByPSIyNSIgZmlsbD0id2hpdGUiLz48cGF0aCBkPSJNIDUwIDE0MCBRIDUwIDExMCA3NSAxMTAgTCAxMjUgMTEwIFEgMTUwIDExMCAxNTAgMTQwIFogZmlsbD0id2hpdGUiLz48L3N2Zz4=";
+    try {
+      await supabase.auth.updateUser({
+        data: { avatar_url: defaultAvatarSvg },
+      });
+    } catch (error) {
+      console.error("Error setting avatar:", error);
+    }
+  }
+
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentQuote((prev) => (prev + 1) % quotes.length);
@@ -40,17 +51,6 @@ export default function Login() {
       authListener.subscription.unsubscribe();
     };
   }, [router]);
-
-  async function setDefaultAvatar() {
-    const defaultAvatarSvg = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyMDAgMjAwIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzVjM2EyMSIvPjxjaXJjbGUgY3g9IjEwMCIgY3k9IjcwIiByPSIyNSIgZmlsbD0id2hpdGUiLz48cGF0aCBkPSJNIDUwIDE0MCBRIDUwIDExMCA3NSAxMTAgTCAxMjUgMTEwIFEgMTUwIDExMCAxNTAgMTQwIFogZmlsbD0id2hpdGUiLz48L3N2Zz4=";
-    try {
-      await supabase.auth.updateUser({
-        data: { avatar_url: defaultAvatarSvg },
-      });
-    } catch (error) {
-      console.error("Error setting avatar:", error);
-    }
-  }
 
   const handleLogin = async () => {
     await supabase.auth.signInWithOAuth({ provider: "google" });
@@ -126,7 +126,7 @@ export default function Login() {
           className="mb-8 p-4 rounded-xl bg-gradient-to-r from-[#f5e6d3] to-[#e8d8c3] dark:from-gray-800 dark:to-gray-700 border-l-4 border-[#5c3a21] dark:border-[#f5e6d3]"
         >
           <p className="text-center text-sm italic font-semibold text-[#5c3a21] dark:text-[#f5e6d3]">
-            "{quotes[currentQuote]}"
+            {`"${quotes[currentQuote]}"`}
           </p>
         </motion.div>
 
